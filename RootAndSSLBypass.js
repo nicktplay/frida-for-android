@@ -1,10 +1,3 @@
-// $ frida -l antiroot.js -U -f com.example.app --no-pause
-// CHANGELOG by Pichaya Morimoto (p.morimoto@sth.sh): 
-//  - I added extra whitelisted items to deal with the latest versions 
-// 						of RootBeer/Cordova iRoot as of August 6, 2019
-//  - The original one just fucked up (kill itself) if Magisk is installed lol
-// Credit & Originally written by: https://codeshare.frida.re/@dzonerzy/fridantiroot/
-// If this isn't working in the future, check console logs, rootbeer src, or libtool-checker.so
 Java.perform(function() {
 
     var RootPackages = ["com.noshufou.android.su", "com.noshufou.android.su.elite", "eu.chainfire.supersu",
@@ -13,10 +6,10 @@ Java.perform(function() {
         "com.ramdroid.appquarantine", "com.ramdroid.appquarantinepro", "com.devadvance.rootcloak", "com.devadvance.rootcloakplus",
         "de.robv.android.xposed.installer", "com.saurik.substrate", "com.zachspong.temprootremovejb", "com.amphoras.hidemyroot",
         "com.amphoras.hidemyrootadfree", "com.formyhm.hiderootPremium", "com.formyhm.hideroot", "me.phh.superuser",
-        "eu.chainfire.supersu.pro", "com.kingouser.com", "com.android.vending.billing.InAppBillingService.COIN","com.topjohnwu.magisk"
+        "eu.chainfire.supersu.pro", "com.kingouser.com"
     ];
 
-    var RootBinaries = ["su", "busybox", "supersu", "Superuser.apk", "KingoUser.apk", "SuperSu.apk","magisk"];
+    var RootBinaries = ["su", "busybox", "supersu", "Superuser.apk", "KingoUser.apk", "SuperSu.apk"];
 
     var RootProperties = {
         "ro.build.selinux": "1",
@@ -57,8 +50,8 @@ Java.perform(function() {
 
     if (loaded_classes.indexOf('java.lang.ProcessManager') != -1) {
         try {
-            //useProcessManager = true;
-            //var ProcessManager = Java.use('java.lang.ProcessManager');
+
+
         } catch (err) {
             send("ProcessManager Hook failed: " + err);
         }
@@ -70,8 +63,8 @@ Java.perform(function() {
 
     if (loaded_classes.indexOf('android.security.keystore.KeyInfo') != -1) {
         try {
-            //useKeyInfo = true;
-            //var KeyInfo = Java.use('android.security.keystore.KeyInfo');
+
+
         } catch (err) {
             send("KeyInfo Hook failed: " + err);
         }
@@ -115,11 +108,6 @@ Java.perform(function() {
         if (cmd == "su") {
             var fakeCmd = "justafakecommandthatcannotexistsusingthisshouldthowanexceptionwheneversuiscalled";
             send("Bypass " + cmd + " command");
-            return exec1.call(this, fakeCmd);
-        }
-        if (cmd == "which") {
-            var fakeCmd = "justafakecommandthatcannotexistsusingthisshouldthowanexceptionwheneversuiscalled";
-            send("Bypass which command");
             return exec1.call(this, fakeCmd);
         }
         return exec5.call(this, cmd, env, dir);
@@ -228,29 +216,13 @@ Java.perform(function() {
 
     Interceptor.attach(Module.findExportByName("libc.so", "fopen"), {
         onEnter: function(args) {
-            var path1 = Memory.readCString(args[0]);
-            var path = path1.split("/");
+            var path = Memory.readCString(args[0]);
+            path = path.split("/");
             var executable = path[path.length - 1];
             var shouldFakeReturn = (RootBinaries.indexOf(executable) > -1)
             if (shouldFakeReturn) {
-                Memory.writeUtf8String(args[0], "/ggezxxx");
-                send("Bypass native fopen >> "+path1);
-            }
-        },
-        onLeave: function(retval) {
-
-        }
-    });
-
-    Interceptor.attach(Module.findExportByName("libc.so", "fopen"), {
-        onEnter: function(args) {
-            var path1 = Memory.readCString(args[0]);
-            var path = path1.split("/");
-            var executable = path[path.length - 1];
-            var shouldFakeReturn = (RootBinaries.indexOf(executable) > -1)
-            if (shouldFakeReturn) {
-                Memory.writeUtf8String(args[0], "/ggezxxx");
-                send("Bypass native fopen >> "+path1);
+                Memory.writeUtf8String(args[0], "/notexists");
+                send("Bypass native fopen");
             }
         },
         onLeave: function(retval) {
@@ -276,28 +248,13 @@ Java.perform(function() {
         }
     });
 
-    /*
 
-    TO IMPLEMENT:
-
-    Exec Family
-
-    int execl(const char *path, const char *arg0, ..., const char *argn, (char *)0);
-    int execle(const char *path, const char *arg0, ..., const char *argn, (char *)0, char *const envp[]);
-    int execlp(const char *file, const char *arg0, ..., const char *argn, (char *)0);
-    int execlpe(const char *file, const char *arg0, ..., const char *argn, (char *)0, char *const envp[]);
-    int execv(const char *path, char *const argv[]);
-    int execve(const char *path, char *const argv[], char *const envp[]);
-    int execvp(const char *file, char *const argv[]);
-    int execvpe(const char *file, char *const argv[], char *const envp[]);
-
-    */
 
 
     BufferedReader.readLine.overload().implementation = function() {
         var text = this.readLine.call(this);
         if (text === null) {
-            // just pass , i know it's ugly as hell but test != null won't work :(
+
         } else {
             var shouldFakeRead = (text.indexOf("ro.build.tags=test-keys") > -1);
             if (shouldFakeRead) {
@@ -378,5 +335,270 @@ Java.perform(function() {
             return true;
         }
     }
+
+
+    var File = Java.use("java.io.File");
+    var X509TrustManager = Java.use('javax.net.ssl.X509TrustManager');
+    var HostnameVerifier = Java.use('javax.net.ssl.HostnameVerifier');
+    var SSLContext = Java.use('javax.net.ssl.SSLContext');
+    var quiet_output = false;
+
+    function quiet_send(data) {
+
+        if (quiet_output) {
+
+            return;
+        }
+
+        send(data)
+    }
+
+
+
+    var X509Certificate = Java.use("java.security.cert.X509Certificate");
+    var TrustManager;
+    try {
+        TrustManager = Java.registerClass({
+            name: 'org.wooyun.TrustManager',
+            implements: [X509TrustManager],
+            methods: {
+                checkClientTrusted: function(chain, authType) {},
+                checkServerTrusted: function(chain, authType) {},
+                getAcceptedIssuers: function() {
+
+
+                    return [];
+                }
+            }
+        });
+    } catch (e) {
+        quiet_send("registerClass from X509TrustManager >>>>>>>> " + e.message);
+    }
+
+
+    var TrustManagers = [TrustManager.$new()];
+
+    try {
+
+        var TLS_SSLContext = SSLContext.getInstance("TLS");
+        TLS_SSLContext.init(null, TrustManagers, null);
+        var EmptySSLFactory = TLS_SSLContext.getSocketFactory();
+    } catch (e) {
+        quiet_send(e.message);
+    }
+
+    send('Custom, Empty TrustManager ready');
+
+    var SSLContext_init = SSLContext.init.overload(
+        '[Ljavax.net.ssl.KeyManager;', '[Ljavax.net.ssl.TrustManager;', 'java.security.SecureRandom');
+
+    SSLContext_init.implementation = function(keyManager, trustManager, secureRandom) {
+
+        quiet_send('Overriding SSLContext.init() with the custom TrustManager');
+
+        SSLContext_init.call(this, null, TrustManagers, null);
+    };
+
+
+
+
+    try {
+
+        var CertificatePinner = Java.use('okhttp3.CertificatePinner');
+
+        quiet_send('OkHTTP 3.x Found');
+
+        CertificatePinner.check.overload('java.lang.String', 'java.util.List').implementation = function() {
+
+            quiet_send('OkHTTP 3.x check() called. Not throwing an exception.');
+        }
+
+    } catch (err) {
+
+
+
+        if (err.message.indexOf('ClassNotFoundException') === 0) {
+
+            throw new Error(err);
+        }
+    }
+
+
+    try {
+
+        var PinningTrustManager = Java.use('appcelerator.https.PinningTrustManager');
+
+        send('Appcelerator Titanium Found');
+
+        PinningTrustManager.checkServerTrusted.implementation = function() {
+
+            quiet_send('Appcelerator checkServerTrusted() called. Not throwing an exception.');
+        }
+
+    } catch (err) {
+
+
+
+        if (err.message.indexOf('ClassNotFoundException') === 0) {
+
+            throw new Error(err);
+        }
+    }
+
+
+    try {
+        var OkHttpClient = Java.use("com.squareup.okhttp.OkHttpClient");
+        OkHttpClient.setCertificatePinner.implementation = function(certificatePinner) {
+
+            quiet_send("OkHttpClient.setCertificatePinner Called!");
+            return this;
+        };
+
+
+        var CertificatePinner = Java.use("com.squareup.okhttp.CertificatePinner");
+        CertificatePinner.check.overload('java.lang.String', '[Ljava.security.cert.Certificate;').implementation = function(p0, p1) {
+
+            quiet_send("okhttp Called! [Certificate]");
+            return;
+        };
+        CertificatePinner.check.overload('java.lang.String', 'java.util.List').implementation = function(p0, p1) {
+
+            quiet_send("okhttp Called! [List]");
+            return;
+        };
+    } catch (e) {
+        quiet_send("com.squareup.okhttp not found");
+    }
+
+
+
+
+    var WebViewClient = Java.use("android.webkit.WebViewClient");
+
+    WebViewClient.onReceivedSslError.implementation = function(webView, sslErrorHandler, sslError) {
+        quiet_send("WebViewClient onReceivedSslError invoke");
+
+        sslErrorHandler.proceed();
+        return;
+    };
+
+    WebViewClient.onReceivedError.overload('android.webkit.WebView', 'int', 'java.lang.String', 'java.lang.String').implementation = function(a, b, c, d) {
+        quiet_send("WebViewClient onReceivedError invoked");
+        return;
+    };
+
+    WebViewClient.onReceivedError.overload('android.webkit.WebView', 'android.webkit.WebResourceRequest', 'android.webkit.WebResourceError').implementation = function() {
+        quiet_send("WebViewClient onReceivedError invoked");
+        return;
+    };
+
+
+    var HttpsURLConnection = Java.use("javax.net.ssl.HttpsURLConnection");
+
+
+    HttpsURLConnection.setDefaultHostnameVerifier.implementation = function(hostnameVerifier) {
+        quiet_send("HttpsURLConnection.setDefaultHostnameVerifier invoked");
+        return null;
+    };
+
+
+    HttpsURLConnection.setSSLSocketFactory.implementation = function(SSLSocketFactory) {
+        quiet_send("HttpsURLConnection.setSSLSocketFactory invoked");
+        return null;
+    };
+
+
+    HttpsURLConnection.setHostnameVerifier.implementation = function(hostnameVerifier) {
+        quiet_send("HttpsURLConnection.setHostnameVerifier invoked");
+        return null;
+    };
+
+
+    var TrustHostnameVerifier;
+    try {
+        TrustHostnameVerifier = Java.registerClass({
+            name: 'org.wooyun.TrustHostnameVerifier',
+            implements: [HostnameVerifier],
+            method: {
+                verify: function(hostname, session) {
+                    return true;
+                }
+            }
+        });
+
+    } catch (e) {
+
+        quiet_send("registerClass from hostnameVerifier >>>>>>>> " + e.message);
+    }
+
+    try {
+        var RequestParams = Java.use('org.xutils.http.RequestParams');
+        RequestParams.setSslSocketFactory.implementation = function(sslSocketFactory) {
+            sslSocketFactory = EmptySSLFactory;
+            return null;
+        }
+
+        RequestParams.setHostnameVerifier.implementation = function(hostnameVerifier) {
+            hostnameVerifier = TrustHostnameVerifier.$new();
+            return null;
+        }
+
+    } catch (e) {
+        quiet_send("Xutils hooks not Found");
+    }
+
+
+    try {
+        var AbstractVerifier = Java.use("ch.boye.httpclientandroidlib.conn.ssl.AbstractVerifier");
+        AbstractVerifier.verify.overload('java.lang.String', '[Ljava.lang.String', '[Ljava.lang.String', 'boolean').implementation = function() {
+            quiet_send("httpclientandroidlib Hooks");
+            return null;
+        }
+    } catch (e) {
+        quiet_send("httpclientandroidlib Hooks not found");
+    }
+
+
+    var TrustManagerImpl = Java.use("com.android.org.conscrypt.TrustManagerImpl");
+
+    try {
+
+        TrustManagerImpl.verifyChain.implementation = function(untrustedChain, trustAnchorChain, host, clientAuth, ocspData, tlsSctData) {
+            quiet_send("TrustManagerImpl verifyChain called");
+
+
+
+            return untrustedChain;
+        }
+    } catch (e) {
+        quiet_send("TrustManagerImpl verifyChain nout found below 7.0");
+    }
+
+    try {
+        var OpenSSLSocketImpl = Java.use('com.android.org.conscrypt.OpenSSLSocketImpl');
+        OpenSSLSocketImpl.verifyCertificateChain.implementation = function(certRefs, authMethod) {
+            quiet_send('OpenSSLSocketImpl.verifyCertificateChain');
+        }
+
+        quiet_send('OpenSSLSocketImpl pinning')
+    } catch (err) {
+        quiet_send('OpenSSLSocketImpl pinner not found');
+    }
+    try {
+        var Activity = Java.use("com.datatheorem.android.trustkit.pinning.OkHostnameVerifier");
+        Activity.verify.overload('java.lang.String', 'javax.net.ssl.SSLSession').implementation = function(str) {
+            quiet_send('Trustkit.verify1: ' + str);
+            return true;
+        };
+        Activity.verify.overload('java.lang.String', 'java.security.cert.X509Certificate').implementation = function(str) {
+            quiet_send('Trustkit.verify2: ' + str);
+            return true;
+        };
+
+        quiet_send('Trustkit pinning')
+    } catch (err) {
+        quiet_send('Trustkit pinner not found')
+    }
+
 
 });
